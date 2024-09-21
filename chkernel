@@ -1,0 +1,48 @@
+#!/bin/bash
+
+error() {
+    echo "Error: $1" >&2
+    exit 1
+}
+
+if [ "$(id -u)" -ne 0 ]; then
+    error "This script must be run as root"
+fi
+
+kernels=($(ls /boot/vmlinuz-* | sed 's|/boot/vmlinuz-||'))
+
+if [ ${#kernels[@]} -eq 0 ]; then
+    error "No kernels found in /boot/"
+fi
+
+echo "Available kernels:"
+for i in "${!kernels[@]}"; do
+    echo "$((i+1)). ${kernels[i]}"
+done
+
+read -p "Enter the number of the kernel you want to use: " choice
+
+if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "${#kernels[@]}" ]; then
+    error "Invalid selection"
+fi
+
+selected_kernel="${kernels[$((choice-1))]}"
+
+vmlinuz="/boot/vmlinuz-$selected_kernel"
+initrd="/boot/initrd.img-$selected_kernel"
+
+[ -f "$vmlinuz" ] || error "vmlinuz file not found: $vmlinuz"
+[ -f "$initrd" ] || error "initrd file not found: $initrd"
+
+echo "Changing kernel to $selected_kernel"
+kernelstub -v -k "$vmlinuz" -i "$initrd" || error "kernelstub command failed"
+
+echo "Kernel successfully changed to $selected_kernel"
+
+read -p "Do you want to reboot now? (y/N): " reboot_choice
+if [[ $reboot_choice =~ ^[Yy]$ ]]; then
+    echo "Rebooting..."
+    reboot
+else
+    echo "Please reboot your system later to apply the kernel change."
+fi
